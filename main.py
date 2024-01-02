@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
 from model import TransformerModel
-from dataset import HumanPoseDataset
+from dataset import HumanPoseIterableDataset
 
 
 CHECKPOINT_DIR = "checkpoints"
@@ -65,14 +65,14 @@ def train(rank, world_size):
     optimizer = optim.Adam(ddp_model.parameters(), lr=0.0001)
     scheduler = optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
 
-    train_dataset = HumanPoseDataset(TRAIN_DATA_DIR)
+    train_dataset = HumanPoseIterableDataset(TRAIN_DATA_DIR)
     train_sampler = DistributedSampler(train_dataset, rank=rank)
     train_loader = DataLoader(train_dataset,
                               batch_size=32,
                               num_workers=4,                     
                               sampler=train_sampler)
     
-    eval_dataset = HumanPoseDataset(EVAL_DATA_DIR)
+    eval_dataset = HumanPoseIterableDataset(EVAL_DATA_DIR)
     eval_sampler = DistributedSampler(eval_dataset, rank=rank)
     eval_loader = DataLoader(eval_dataset,
                              batch_size=32,
