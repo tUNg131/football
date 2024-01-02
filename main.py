@@ -16,8 +16,10 @@ from dataset import HumanPoseDataset
 
 
 CHECKPOINT_DIR = "checkpoints"
+TRAIN_DATA_DIR = "/rds/user/tl526/hpc-work/football/data/4fps/train"
+EVAL_DATA_DIR = "/rds/user/tl526/hpc-work/football/data/4fps/eval"
 MODEL_ARGS = ()
-MODEL_KWARGS = dict(seq_len=32,
+MODEL_KWARGS = dict(timesteps=32,
                     d_x=3,
                     d_model=256,
                     n_head=8,
@@ -64,12 +66,14 @@ def train(rank, world_size):
     train_sampler = DistributedSampler(train_dataset, rank=rank)
     train_loader = DataLoader(train_dataset,
                               batch_size=32,
+                              num_workers=4,                     
                               sampler=train_sampler)
     
     eval_dataset = HumanPoseDataset("data/eval")
     eval_sampler = DistributedSampler(eval_dataset, rank=rank)
     eval_loader = DataLoader(eval_dataset,
                              batch_size=32,
+                             num_workers=4,                     
                              sampler=eval_sampler)
     
     best_val_loss = float('inf')
@@ -148,9 +152,8 @@ def train(rank, world_size):
 
 if __name__ == "__main__":
     # 4 GPUs
-    # world_size = 4
-    # mp.spawn(train,
-    #          args=(world_size,),
-    #          nprocs=world_size,
-    #          join=True)
-    print("Hello, world!")
+    world_size = 4
+    mp.spawn(train,
+             args=(world_size,),
+             nprocs=world_size,
+             join=True)

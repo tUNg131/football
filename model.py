@@ -4,15 +4,15 @@ import torch.nn as nn
 
 class Embedding(nn.Module):
 
-    def __init__(self, seq_len, n_joint, d_x, d_model):
+    def __init__(self, timesteps, n_joint, d_x, d_model):
         super().__init__()
 
         self.linear = nn.Linear(
             in_features=d_x * n_joint, out_features=d_model
         )
 
-        self.positional_embedding = nn.Embedding(
-            num_embeddings=seq_len, embedding_dim=d_model
+        self.time_embedding = nn.Embedding(
+            num_embeddings=timesteps, embedding_dim=d_model
         )
 
         self.space_embedding = nn.Embedding(
@@ -24,11 +24,11 @@ class Embedding(nn.Module):
         )
 
     def forward(self, x):
-        bsize, seq_len, n_joint, d_x = x.shape
+        bsize, timesteps, n_joint, d_x = x.shape
 
-        # positional embedding
-        pos_emb = self.positional_embedding(
-            torch.arrange(seq_len, dtype=torch.int)
+        # time embedding
+        pos_emb = self.time_embedding(
+            torch.arrange(timesteps, dtype=torch.int)
             .to(x.device)
             .unsqueeze(0)
             .unsqueeze(-1)
@@ -43,7 +43,7 @@ class Embedding(nn.Module):
             .to(x.device)
             .unsqueeze(0)
             .unsqueeze(-1)
-            .expand(bsize, -1, seq_len)
+            .expand(bsize, -1, timesteps)
             .contiguous()
             .view(bsize, -1)
         )
@@ -61,10 +61,10 @@ class Embedding(nn.Module):
 
 class TransformerModel(nn.Module):
 
-    def __init__(self, seq_len, d_x, d_model, n_head, d_hid, n_layers, dropout=0.2):
+    def __init__(self, timesteps, d_x, d_model, n_head, d_hid, n_layers, dropout=0.2):
         super().__init__()
 
-        self.embedding = Embedding(seq_len, d_x, d_model)
+        self.embedding = Embedding(timesteps, d_x, d_model)
 
         encoder_layer = nn.TransformerEncoderLayer(d_model, n_head, d_hid, dropout, batch_first=True)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, n_layers)
@@ -72,7 +72,7 @@ class TransformerModel(nn.Module):
         self.linear = nn.Linear(d_model, 1)
 
     def forward(self, x):
-        bsize, seq_len, n_joint, d_x = x.shape
+        bsize, timesteps, n_joint, d_x = x.shape
 
         emb = self.embedding(x)
 
@@ -80,7 +80,7 @@ class TransformerModel(nn.Module):
 
         output = self.linear(output)
 
-        output = output.view(bsize, seq_len, n_joint, d_x)
+        output = output.view(bsize, timesteps, n_joint, d_x)
         return output
     
 
