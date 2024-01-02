@@ -45,6 +45,9 @@ def setup(rank, world_size):
     # initialize the process group
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
+    # Set default cuda device
+    torch.cuda.set_device(rank)
+
 
 def cleanup():
     dist.barrier()
@@ -56,7 +59,7 @@ def train(rank, world_size):
 
     local_model = TransformerModel(*MODEL_ARGS, **MODEL_KWARGS)
     
-    ddp_model = DDP(local_model, device_ids=[rank])
+    ddp_model = DDP(local_model, device_ids=[rank], output_device=rank)
 
     criterion = nn.MSELoss()
     optimizer = optim.Adam(ddp_model.parameters(), lr=0.0001)
@@ -88,8 +91,6 @@ def train(rank, world_size):
 
         total_train_loss = 0.
         for data, target in train_loader:
-            data, target = data.to(rank), target.to(rank)
-
             optimizer.zero_grad(set_to_none=True)
 
             with torch.auto_cast("cuda"):
@@ -110,9 +111,7 @@ def train(rank, world_size):
 
         total_eval_loss = 0.
         with torch.no_grad():
-            for data, target in eval_loader:
-                data, target = data.to(rank), target.to(rank)
-                
+            for data, target in eval_loader:                
                 with torch.autocast("cuda"):
                     output = ddp_model(data)
 
