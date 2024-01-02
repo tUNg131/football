@@ -64,7 +64,7 @@ class TransformerModel(nn.Module):
     def __init__(self, timesteps, d_x, d_model, n_head, d_hid, n_layers, dropout=0.2):
         super().__init__()
 
-        self.embedding = Embedding(timesteps, d_x, d_model)
+        self.embedding = Embedding(timesteps, n_joint=29, d_x=d_x, d_model=d_model)
 
         encoder_layer = nn.TransformerEncoderLayer(d_model, n_head, d_hid, dropout, batch_first=True)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, n_layers)
@@ -73,6 +73,10 @@ class TransformerModel(nn.Module):
 
     def forward(self, x):
         bsize, timesteps, n_joint, d_x = x.shape
+
+        # Subtract mid-hip & remove mid-hip: (batch_size, seq_len, 30, 3) -> (batch_size, seq_len, 29, 3)
+        x = x - x[..., 13, :].unsqueeze(2)
+        x = torch.cat(x[..., :13, :], x[..., 14:, :])
 
         emb = self.embedding(x)
 
