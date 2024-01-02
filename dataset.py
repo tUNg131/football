@@ -64,11 +64,10 @@ class HumanPoseIterableDataset(IterableDataset):
                 play = set()
                 minute_data = defaultdict(dict)
 
-                with (
-                    open(ball_path, "r") as ball_file,
-                    open(centroids_path, "r") as centroid_file,
-                    open(joints_path, "r") as joints_file
-                ):
+                with open(ball_path, "r") as ball_file, \
+                     open(centroids_path, "r") as centroid_file, \
+                     open(joints_path, "r") as joints_file:
+                
                     ball_json = json.load(ball_file)
                     for b in ball_json['samples']['ball']:
                         time = float(b['time'])
