@@ -57,9 +57,9 @@ def cleanup():
 def train(rank, world_size):
     setup(rank, world_size)
 
-    local_model = TransformerModel(*MODEL_ARGS, **MODEL_KWARGS)
+    local_model = TransformerModel(*MODEL_ARGS, **MODEL_KWARGS).to(rank)
     
-    ddp_model = DDP(local_model, device_ids=[rank], output_device=rank)
+    ddp_model = DDP(local_model, device_ids=[rank])
 
     criterion = nn.MSELoss()
     optimizer = optim.Adam(ddp_model.parameters(), lr=0.0001)
