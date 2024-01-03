@@ -47,16 +47,20 @@ LABELS = [
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-class HumanPoseIterableDataset(IterableDataset):
+class HumanPoseDataset(Dataset):
     def __init__(self, data_directory, timesteps=32, frame_rate=4):
         self.data_directory = data_directory
         self.timesteps = timesteps
         self.frame_rate = frame_rate
 
-    def __iter__(self):
+        self.init_dataset()
+
+    def init_dataset(self):
+        self.raw_dataset = []
+        
         for match_path in self.get_match_fullpaths():
             sequences = defaultdict(list)
-            last_t = defaultdict(int)
+            last_played = defaultdict(int)
 
             for file_paths, minute in self.get_files(match_path):
                 ball_path, centroids_path, joints_path = file_paths
@@ -85,23 +89,23 @@ class HumanPoseIterableDataset(IterableDataset):
                         time = float(pp['centroid'][0]['time'])
                         if time in play:
                             minute_data[pp['trackId']][time].append(pp['centroid'][0]['pos'])
+ 
+                for player in minute_data.keys():
+                    for second in sorted(play):
+                        if minute + second - last_played[player] == 0.25 and second in minute_data[player]:
+                            sequences[player].append(minute_data[player][second])
+                            
+                            if len(sequences[player]) >= self.timesteps:
+                                # Add to raw dataset
+                                self.raw_dataset.append(sequences[player])
 
-                    T = sorted(play)
+                                sequences[player] = []
+                            else:
+                                sequences[player] = []
 
-                    for player in minute_data.keys():
-                        for t in T:
-                            if minute + t - last_t[player] == (1 / self.frame_rate) and t in minute_data[player]:
-                                sequences[player].append(minute_data[player][t])
-                                if len(sequences[player]) >= self.timesteps:
+                            last_played[player] = minute + second
 
-                                    data, target = self.prepare(sequences[player])
-                                    yield data, target
-
-                                    sequences[player] = []
-                                else:
-                                    sequences[player] = []
-
-                                last_t[player] = minute + t
+            print(sequences)
 
     def get_key(self, filename):
         m = re.search(r'_(1|2)_(\d{1,2})(?:_(\d{1,2}))?_football_', filename)
@@ -154,6 +158,7 @@ class HumanPoseIterableDataset(IterableDataset):
 
         worker_info = torch.utils.data.get_worker_info()
         if worker_info is None: # single-process
+            print("Fullpaths", fullpaths)
             return fullpaths
         else:
             worker_fullpaths = []
@@ -161,6 +166,8 @@ class HumanPoseIterableDataset(IterableDataset):
             for i, path in enumerate(fullpaths):
                 if i % worker_id.num_workers == worker_id:
                     worker_fullpaths.append(path)
+
+            print("Worker full paths", worker_fullpaths)
             return worker_fullpaths
         
     def drop(self, data, max_gap_size=3):
@@ -174,9 +181,9 @@ class HumanPoseIterableDataset(IterableDataset):
         data[start_index:start_index + gap_size] = float('nan')
 
         return data
-    
-    def prepare(self, seq):
-        data = torch.tensor(seq, dtype=torch.float, device=device)
+
+    def __getitem__(self, index):
+        data = torch.tensor(self.raw_dataset[index], dtype=torch.float, device=device)
 
         target = data.clone()
 
@@ -184,8 +191,11 @@ class HumanPoseIterableDataset(IterableDataset):
 
         return data, target
 
+    def __len__(self):
+        return len(self.raw_dataset)
 
-class HumanPoseDataset(Dataset):
+
+class HumanPoseDatasetH5(Dataset):
     def __init__(self, root, timesteps=32):
         self.dataset = []
 
