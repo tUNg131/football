@@ -37,7 +37,7 @@ class Embedding(nn.Module):
         # space embedding
         space_emb = self.space_embedding(
             torch.arange(d_x * n_joint, dtype=torch.int, device=x.device)
-            .repeat(timesteps)
+            .repeat(bsize, timesteps)
         )
 
         # nan embedding
