@@ -29,20 +29,15 @@ class Embedding(nn.Module):
         # time embedding
         pos_emb = self.time_embedding(
             torch.arange(timesteps, dtype=torch.int, device=x.device)
-            .unsqueeze(0)
-            .unsqueeze(-1)
-            .expand(bsize, -1, d_x * n_joint)
-            .contiguous()
+            .view(1, -1, 1)
+            .repeat(bsize, 1, d_x * n_joint)
             .view(bsize, -1)
         )
 
         # space embedding
         space_emb = self.space_embedding(
-            torch.arange(d_x * n_joint, dtype=torch.int, device=x.device)
-            .unsqueeze(0)
-            .unsqueeze(-1)
-            .expand(bsize, -1, timesteps)
-            .contiguous()
+            torch.arange(d_x * n_joint, dtype=torch.int)
+            .repeat(timesteps)
             .view(bsize, -1)
         )
 
