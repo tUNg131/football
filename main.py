@@ -22,7 +22,7 @@ MODEL_KWARGS = dict(n_timestep=32,
                     n_joint=29,
                     d_x=3,
                     d_model=256,
-                    n_head=32,
+                    n_head=8,
                     d_hid=512,
                     n_layers=8)
 
