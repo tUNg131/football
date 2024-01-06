@@ -8,26 +8,26 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 from torch.utils.data.distributed import DistributedSampler
 
 from model import TransformerModel
-from dataset import HumanPoseIterableDataset
+from dataset import HumanPoseDataset
 
 
 CHECKPOINT_DIR = "checkpoints"
-TRAIN_DATA_DIR = "/rds/user/tl526/hpc-work/football/data/4fps/train"
-EVAL_DATA_DIR = "/rds/user/tl526/hpc-work/football/data/4fps/eval"
+DATA_DIR = "/home/tl526/rds/hpc-work/football/h5/t32.hdf5"
 MODEL_ARGS = ()
-MODEL_KWARGS = dict(timesteps=32,
+MODEL_KWARGS = dict(n_timestep=32,
+                    n_joint=29,
                     d_x=3,
                     d_model=256,
                     n_head=8,
                     d_hid=512,
                     n_layers=8)
 
-
 def save(model):
+    return
     # Create directory if not exist
     os.makedirs(os.path.dirname(CHECKPOINT_DIR), exist_ok=True)
 
@@ -45,10 +45,6 @@ def setup(rank, world_size):
     # initialize the process group
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
-    # Set default cuda device
-    torch.cuda.set_device(rank)
-
-
 def cleanup():
     dist.barrier()
     dist.destroy_process_group()
@@ -56,6 +52,10 @@ def cleanup():
 
 def train(rank, world_size):
     setup(rank, world_size)
+
+    ds = HumanPoseDataset(DATA_DIR)
+    generator = torch.Generator().manual_seed(42)
+    train_dataset, eval_dataset = random_split(ds, [0.7, 0.3], generator=generator)
 
     local_model = TransformerModel(*MODEL_ARGS, **MODEL_KWARGS).to(rank)
     
@@ -65,24 +65,23 @@ def train(rank, world_size):
     optimizer = optim.Adam(ddp_model.parameters(), lr=0.0001)
     scheduler = optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
 
-    train_dataset = HumanPoseIterableDataset(TRAIN_DATA_DIR)
-    train_sampler = DistributedSampler(train_dataset, rank=rank)
+    train_sampler = DistributedSampler(train_dataset)
     train_loader = DataLoader(train_dataset,
-                              batch_size=32,
-                              num_workers=4,                     
+                              batch_size=16,
                               sampler=train_sampler)
     
-    eval_dataset = HumanPoseIterableDataset(EVAL_DATA_DIR)
-    eval_sampler = DistributedSampler(eval_dataset, rank=rank)
+    eval_sampler = DistributedSampler(eval_dataset)
     eval_loader = DataLoader(eval_dataset,
-                             batch_size=32,
-                             num_workers=4,                     
+                             batch_size=16,
                              sampler=eval_sampler)
     
     best_val_loss = float('inf')
-    epoch = 1
+    # epoch = 1
     patience = 3
-    while True:
+
+    # while True:
+    for epoch in range(1, 11):
+        tstart = time.time()
 
         # Training
         train_sampler.set_epoch(epoch)
@@ -93,7 +92,7 @@ def train(rank, world_size):
         for data, target in train_loader:
             optimizer.zero_grad(set_to_none=True)
 
-            with torch.auto_cast("cuda"):
+            with torch.autocast("cuda"):
                 output = ddp_model(data)
 
                 nan_mask = torch.isnan(data)
@@ -118,16 +117,22 @@ def train(rank, world_size):
                     nan_mask = torch.isnan(data)
                     loss = criterion(target[nan_mask], output[nan_mask])
 
-            total_eval_loss += loss.item()
+                total_eval_loss += loss.item()
 
         # Sum loss from all devices
+        total_train_loss = torch.tensor(total_train_loss, device=rank)
+        dist.reduce(total_train_loss, dst=0)
+
         total_eval_loss = torch.tensor(total_eval_loss, device=rank)
         dist.reduce(total_eval_loss, dst=0)
 
         stop_early = torch.zeros(1, dtype=torch.bool, device=rank)
 
         if rank == 0:
+            train_loss = total_train_loss.item() / len(train_loader)
             eval_loss = total_eval_loss.item() / len(eval_loader)
+
+            print(f"epoch {epoch} | train loss {train_loss:5.4f} | eval loss {eval_loss:5.4f}")
             if eval_loss < best_val_loss:
 
                 save(ddp_model)
@@ -139,12 +144,14 @@ def train(rank, world_size):
             else:
                 patience -= 1
         
-        # Check for early stopping
-        dist.broadcast(stop_early, src=0)
-        if stop_early:
-            break
+        # # Check for early stopping
+        # dist.broadcast(stop_early, src=0)
+        # if stop_early:
+        #     break
 
         scheduler.step()
+
+        epoch += 1
 
     cleanup()
 
@@ -152,6 +159,7 @@ def train(rank, world_size):
 if __name__ == "__main__":
     # 4 GPUs
     world_size = 4
+
     mp.spawn(train,
              args=(world_size,),
              nprocs=world_size,

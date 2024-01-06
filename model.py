@@ -8,7 +8,7 @@ class Embedding(nn.Module):
         super().__init__()
 
         self.linear = nn.Linear(
-            in_features=d_x * n_joint, out_features=d_model
+            in_features=1, out_features=d_model
         )
 
         self.time_embedding = nn.Embedding(
@@ -28,8 +28,7 @@ class Embedding(nn.Module):
 
         # time embedding
         pos_emb = self.time_embedding(
-            torch.arrange(timesteps, dtype=torch.int)
-            .to(x.device)
+            torch.arange(timesteps, dtype=torch.int, device=x.device)
             .unsqueeze(0)
             .unsqueeze(-1)
             .expand(bsize, -1, d_x * n_joint)
@@ -39,8 +38,7 @@ class Embedding(nn.Module):
 
         # space embedding
         space_emb = self.space_embedding(
-            torch.arrange(d_x * n_joint, dtype=torch.int)
-            .to(x.device)
+            torch.arange(d_x * n_joint, dtype=torch.int, device=x.device)
             .unsqueeze(0)
             .unsqueeze(-1)
             .expand(bsize, -1, timesteps)
@@ -48,23 +46,29 @@ class Embedding(nn.Module):
             .view(bsize, -1)
         )
 
-        # flatten x
-        x = torch.flatten(x, start_dim=1)
-
         # nan embedding
-        nan_emb = self.nan_embedding(torch.isnan(x))
+        nan_emb = self.nan_embedding(
+            torch.isnan(x)
+            .int()
+            .view(bsize, -1)
+        )
 
-        x = self.linear(torch.nan_to_num(x))
+        x = self.linear(
+            torch.nan_to_num(x)
+            .view(bsize, -1)
+            .unsqueeze(-1)
+        )
+
         emb = x + pos_emb + space_emb + nan_emb
         return emb
     
 
 class TransformerModel(nn.Module):
 
-    def __init__(self, timesteps, d_x, d_model, n_head, d_hid, n_layers, dropout=0.2):
+    def __init__(self, n_timestep, n_joint, d_x, d_model, n_head, d_hid, n_layers, dropout=0.2):
         super().__init__()
 
-        self.embedding = Embedding(timesteps, n_joint=29, d_x=d_x, d_model=d_model)
+        self.embedding = Embedding(n_timestep, n_joint, d_x, d_model)
 
         encoder_layer = nn.TransformerEncoderLayer(d_model, n_head, d_hid, dropout, batch_first=True)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, n_layers)
@@ -72,19 +76,14 @@ class TransformerModel(nn.Module):
         self.linear = nn.Linear(d_model, 1)
 
     def forward(self, x):
-        bsize, timesteps, n_joint, d_x = x.shape
-
-        # Subtract mid-hip & remove mid-hip: (batch_size, seq_len, 30, 3) -> (batch_size, seq_len, 29, 3)
-        x = x - x[..., 13, :].unsqueeze(2)
-        x = torch.cat(x[..., :13, :], x[..., 14:, :])
-
         emb = self.embedding(x)
 
         output = self.transformer_encoder(emb)
 
         output = self.linear(output)
 
-        output = output.view(bsize, timesteps, n_joint, d_x)
+        output = output.view(x.shape)
+
         return output
     
 

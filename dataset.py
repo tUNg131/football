@@ -4,15 +4,18 @@ import json
 import h5py
 import torch
 import random
+import numpy as np
+import multiprocessing
 
-from collections import defaultdict
+from functools import reduce
+from collections import deque
 
-from torch.utils.data import Dataset, IterableDataset
+from torch.utils.data import Dataset
 
 BALL_DIR = "simulated.samples.ball"
 CENTROID_DIR = "simulated.samples.centroids"
-JOINTS_DIR = "simulated.samples.joints"
-LABELS = [
+JOINT_DIR = "simulated.samples.joints"
+JOINT_KEYS = [
     "lAnkle",
     "lBigToe",
     "lEar",
@@ -44,70 +47,176 @@ LABELS = [
     "rWrist"
 ]
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 
 class HumanPoseDataset(Dataset):
-    def __init__(self, data_directory, timesteps=32, frame_rate=4):
+    def __init__(self, data_directory, timesteps=32, delta_t=0.25):
+        if os.path.isfile(data_directory):
+            with h5py.File(data_directory, "r") as f:
+                ds = f['data']
+                self._data = np.empty(ds.shape, dtype=np.float32)
+                ds.read_direct(self._data)
+                print(f"Loaded {data_directory}")
+            return
+
         self.data_directory = data_directory
         self.timesteps = timesteps
-        self.frame_rate = frame_rate
+        self.delta_t = delta_t
+        self._data = None
 
         self.init_dataset()
 
-    def init_dataset(self):
-        self.raw_dataset = []
+
+    def init_dataset(self, force=False):
+        if self._data and not force:
+            return
         
-        for match_path in self.get_match_fullpaths():
-            sequences = defaultdict(list)
-            last_played = defaultdict(int)
+        data = deque()
+        for match_fullpath in self.get_match_fullpaths():
+            with multiprocessing.Pool() as p:
+                results = p.map(self.process_minute_data,
+                                self.get_minute_data(match_fullpath))
 
-            for file_paths, minute in self.get_files(match_path):
-                ball_path, centroids_path, joints_path = file_paths
+            match_data = reduce(
+                lambda a, b: {**a, **b}, (r[1] for r in results))
 
-                play = set()
-                minute_data = defaultdict(dict)
+            ball_in_play = set().union(*(result[0] for result in results))
 
-                with open(ball_path, "r") as ball_file, \
-                     open(centroids_path, "r") as centroid_file, \
-                     open(joints_path, "r") as joints_file:
-                
-                    ball_json = json.load(ball_file)
-                    for b in ball_json['samples']['ball']:
-                        time = float(b['time'])
-                        if b['play'] == "In":
-                            play.add(time)
+            players = set().union(*(result[2] for result in results))
 
-                    joints_json = json.load(joints_file)
-                    for pp in joints_json['samples']['people']:
-                        time = float(pp['joints'][0]['time'])
-                        if time in play:
-                            minute_data[pp['trackId']][time] = [pp['joints'][0][l] for l in LABELS]
+            timestamps = sorted(ball_in_play)
+            for player_id in players:
+                sequence = []
+                last_played = 0
+                for t in timestamps:
+                    joints_data = self.get_joints_data(match_data, player_id, t)
+                    if t - last_played > self.delta_t or joints_data is None:
+                        sequence = []
+                    else:
+                        sequence.append(joints_data)
+                        if len(sequence) >= self.timesteps:
 
-                    centroid_json = json.load(centroid_file)
-                    for pp in centroid_json['samples']['people']:
-                        time = float(pp['centroid'][0]['time'])
-                        if time in play:
-                            minute_data[pp['trackId']][time].append(pp['centroid'][0]['pos'])
- 
-                for player in minute_data.keys():
-                    for second in sorted(play):
-                        if minute + second - last_played[player] == 0.25 and second in minute_data[player]:
-                            sequences[player].append(minute_data[player][second])
-                            
-                            if len(sequences[player]) >= self.timesteps:
-                                # Add to raw dataset
-                                self.raw_dataset.append(sequences[player])
+                            data.append(sequence)
 
-                                sequences[player] = []
-                            else:
-                                sequences[player] = []
+                            sequence = []
+                    last_played = t
 
-                            last_played[player] = minute + second
+            # Logging
+            print(f"Loaded {match_fullpath}")
+        
+        # prevent memory leak
+        self._data = np.array(data, dtype="f")
 
-            print(sequences)
 
-    def get_key(self, filename):
+    def process_minute_data(self, data):
+        ball_data, centroid_data, joint_data, minute = data
+
+        play = set()
+        players = set()
+        match = {}
+
+        for ball in ball_data:
+            second = ball['time']
+            if ball['play'] == "In":
+                time = self.convert_to_second(minute, second)
+                play.add(time)
+
+        for player in joint_data:
+            joint_coordinates = player['joints'][0]
+
+            second = joint_coordinates['time']
+            time = self.convert_to_second(minute, second)
+
+            id = player['trackId']
+            if time in play:
+                for joint in JOINT_KEYS:
+                    match[id, time, joint] = joint_coordinates[joint]
+
+            players.add(id)
+
+        for player in centroid_data:
+            centroid_coordinates = player['centroid'][0]
+
+            second = centroid_coordinates['time']
+            time = self.convert_to_second(minute, second)
+
+            if time in play:
+                id = player['trackId']
+                match[id, time, 'centroid'] = centroid_coordinates['pos']
+        
+        return play, match, players
+
+
+    def get_minute_data(self, match_fullpath):
+        ball_fullpath = os.path.join(match_fullpath, BALL_DIR)
+        for filename in os.listdir(ball_fullpath):
+            minute = self.get_minute_from_filename(filename)
+
+            if minute is None:
+                continue
+
+            ball_data = self.get_data(
+                os.path.join(match_fullpath, BALL_DIR, filename))
+
+            prefix = filename[:-5] # remove the "_ball"
+            centroid_data = self.get_data(
+                os.path.join(
+                    match_fullpath, CENTROID_DIR, prefix + "_centroids")
+            )
+
+            joint_data = self.get_data(
+                os.path.join(
+                    match_fullpath, JOINT_DIR, prefix + "_joints")
+            )
+
+            yield (
+                ball_data['samples']['ball'],
+                centroid_data['samples']['people'],
+                joint_data['samples']['people'],
+                minute
+            )
+
+    
+    def get_match_fullpaths(self):
+        fullpaths = []
+        for entry in os.listdir(self.data_directory):
+            path = os.path.join(self.data_directory, entry)
+
+            if entry.startswith("."):
+                continue
+
+            if not os.path.isdir(path):
+                continue
+            
+            fullpaths.append(path)
+        return fullpaths
+
+
+    @staticmethod
+    def get_joints_data(match, id, t):
+        data = []
+        for joint in JOINT_KEYS + ['centroid']:
+            k = id, t, joint
+            joint_data = match.get(k)
+            if joint_data is None:
+                return
+            data.append(joint_data)
+        return data
+
+
+    @staticmethod
+    def convert_to_second(minute, second):
+        return float(minute) * 60 + float(second)
+
+
+    @staticmethod
+    def get_data(path):
+        with open(path, "r") as f:
+            content = json.load(f)
+        return content
+
+
+    @staticmethod
+    def get_minute_from_filename(filename):
         m = re.search(r'_(1|2)_(\d{1,2})(?:_(\d{1,2}))?_football_', filename)
 
         if not m:
@@ -122,55 +231,9 @@ class HumanPoseDataset(Dataset):
 
         return t
 
-    def get_files(self, path):
-        files = []
-        ball_path = os.path.join(path, BALL_DIR)
-        for filename in os.listdir(ball_path):
-            t = self.get_key(filename)
 
-            if t is None:
-                continue
-
-            prefix = filename.replace("_ball", "_")
-
-            paths = (
-                os.path.join(path, BALL_DIR, prefix + "ball"),
-                os.path.join(path, CENTROID_DIR, prefix + "centroids"),
-                os.path.join(path, JOINTS_DIR, prefix + "joints")
-            )
-
-            files.append((paths, t))
-        files.sort(key=lambda x: x[1])
-        return files
-
-    def get_match_fullpaths(self):
-        fullpaths = []
-        for entry in os.listdir(self.data_directory):
-            path = os.path.join(self.data_directory, entry)
-
-            if entry.startswith("."):
-                continue
-
-            if not os.path.isdir(path):
-                continue
-            
-            fullpaths.append(path)
-
-        worker_info = torch.utils.data.get_worker_info()
-        if worker_info is None: # single-process
-            print("Fullpaths", fullpaths)
-            return fullpaths
-        else:
-            worker_fullpaths = []
-            worker_id = worker_info.id
-            for i, path in enumerate(fullpaths):
-                if i % worker_id.num_workers == worker_id:
-                    worker_fullpaths.append(path)
-
-            print("Worker full paths", worker_fullpaths)
-            return worker_fullpaths
-        
-    def drop(self, data, max_gap_size=3):
+    @staticmethod
+    def drop(data, max_gap_size=3):
         sequence_length = data.size(dim=0)
 
         assert sequence_length - max_gap_size - 2 >= 1
@@ -182,70 +245,35 @@ class HumanPoseDataset(Dataset):
 
         return data
 
-    def __getitem__(self, index):
-        data = torch.tensor(self.raw_dataset[index], dtype=torch.float, device=device)
+
+    def preprocessing(self, data):
+        # Subtract mid-hip
+        data = data - data[..., 13, np.newaxis, :]
+
+        # Remove mid-hip
+        data = np.delete(data, 13, axis=1)
+
+        return data
+
+
+    def __getitem__(self, idx):
+        data = self.preprocessing(self._data[idx])
+
+        rank = torch.distributed.get_rank()
+        device = torch.device(f'cuda:{rank}' if torch.cuda.is_available() else 'cpu')
+        data = torch.tensor(data, dtype=torch.float, device=device)
 
         target = data.clone()
 
         data = self.drop(data)
 
         return data, target
+
 
     def __len__(self):
-        return len(self.raw_dataset)
+        return len(self._data)
 
-
-class HumanPoseDatasetH5(Dataset):
-    def __init__(self, root, timesteps=32):
-        self.dataset = []
-
-        for entry in os.listdir(root):
-            filename = os.path.join(root, entry)
-
-            # Guard against non-h5 files
-            if not (os.path.isfile(filename) and entry.endswith(".h5")):
-                continue
-
-            with h5py.File(filename, 'r') as h5_file:
-                for key in h5_file.keys():
-                    m = re.search(r"d-(\d+)", key)
-                    if not m:
-                        continue
-
-                    pose_dataset = h5_file[m.group(0)]
-                    time_dataset = h5_file["t-" + m.group(1)]
-
-                    raw = []
-                    last_t = 0.
-                    for p, t in zip(pose_dataset, time_dataset):
-                        if t - last_t == 0.25:
-                            raw.append(p)
-                            if len(raw) >= timesteps:
-
-                                self.dataset.append(raw)
-
-                                raw = []
-                        else:
-                            raw = []
-                        last_t = t
-
-    def drop(self, data, max_gap_size=3):
-        sequence_length = data.size(dim=0)
-
-        assert sequence_length - max_gap_size - 2 >= 1
-
-        gap_size = random.randint(1, max_gap_size)
-        start_index = random.randint(1, sequence_length - gap_size - 2)
-
-        data[start_index:start_index + gap_size] = float('nan')
-
-        return data
-    
-    def __getitem__(self, index):
-        data = torch.tensor(self.dataset[index],
-                            dtype=torch.float)
-        target = data.clone()
-
-        data = self.drop(data)
-
-        return data, target
+    def save(self, filepath):
+        with h5py.File(filepath, "w") as f:
+            f.create_dataset("data", data=self._data, dtype="float32")
+        print(f"Saved to {filepath}")
