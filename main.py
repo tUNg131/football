@@ -15,7 +15,7 @@ from model import TransformerModel
 from dataset import HumanPoseDataset
 
 
-CHECKPOINT_DIR = "checkpoints"
+CHECKPOINT_DIR = "/home/tl526/football/checkpoints"
 DATA_DIR = "/home/tl526/rds/hpc-work/football/h5/t32.hdf5"
 MODEL_ARGS = ()
 MODEL_KWARGS = dict(n_timestep=32,
@@ -27,7 +27,6 @@ MODEL_KWARGS = dict(n_timestep=32,
                     n_layers=8)
 
 def save(model):
-    return
     # Create directory if not exist
     os.makedirs(os.path.dirname(CHECKPOINT_DIR), exist_ok=True)
 
@@ -79,10 +78,7 @@ def train(rank, world_size):
     # epoch = 1
     patience = 3
 
-    # while True:
-    for epoch in range(1, 11):
-        tstart = time.time()
-
+    while True:
         # Training
         train_sampler.set_epoch(epoch)
 
@@ -139,15 +135,15 @@ def train(rank, world_size):
 
                 best_val_loss = eval_loss
                 patience = 3
-            elif patience <= 0:
+            elif patience >= 0:
                 stop_early = True
             else:
                 patience -= 1
         
-        # # Check for early stopping
-        # dist.broadcast(stop_early, src=0)
-        # if stop_early:
-        #     break
+        # Check for early stopping
+        dist.broadcast(stop_early, src=0)
+        if stop_early:
+            break
 
         scheduler.step()
 
