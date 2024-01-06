@@ -75,7 +75,7 @@ def train(rank, world_size):
                              sampler=eval_sampler)
     
     best_val_loss = float('inf')
-    # epoch = 1
+    epoch = 1
     patience = 3
 
     while True:
