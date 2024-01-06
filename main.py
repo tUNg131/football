@@ -122,8 +122,7 @@ def train(rank, world_size):
         total_eval_loss = torch.tensor(total_eval_loss, device=rank)
         dist.reduce(total_eval_loss, dst=0)
 
-        stop_early = torch.zeros(1, dtype=torch.bool, device=rank)
-
+        stop_early = torch.tensor(False, device=rank)
         if rank == 0:
             train_loss = total_train_loss.item() / len(train_loader)
             eval_loss = total_eval_loss.item() / len(eval_loader)
@@ -136,7 +135,7 @@ def train(rank, world_size):
                 best_val_loss = eval_loss
                 patience = 3
             elif patience >= 0:
-                stop_early = True
+                stop_early = torch.tensor(True, device=rank)
             else:
                 patience -= 1
         
