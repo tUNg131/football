@@ -23,7 +23,7 @@ class TimeEmbedding(nn.Module):
         self.register_buffer("pe", pe)
 
     def forward(self, x):
-        return self.pe[x].require_grad_(False)
+        return self.pe[x].requires_grad_(False)
 
 
 class Embedding(nn.Module):
