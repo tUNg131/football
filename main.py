@@ -33,7 +33,7 @@ def save(model):
     # Save the model
     state = [MODEL_ARGS, MODEL_KWARGS, copy.deepcopy(model.state_dict())]
     
-    filename = time.strftime("model_%Y-%m-%d_%H-%M-%S.pt")
+    filename = time.strftime(f"model_{os.environ['SLURM_JOB_ID']}_%Y-%m-%d_%H-%M-%S.pt")
     torch.save(state, os.path.join(CHECKPOINT_DIR, filename))
 
 
@@ -134,7 +134,7 @@ def train(rank, world_size):
 
                 best_val_loss = eval_loss
                 patience = 3
-            elif patience >= 0:
+            elif patience <= 0:
                 stop_early = torch.tensor(True, device=rank)
             else:
                 patience -= 1
@@ -155,6 +155,7 @@ if __name__ == "__main__":
     # 4 GPUs
     world_size = 4
 
+    print(MODEL_KWARGS)
     mp.spawn(train,
              args=(world_size,),
              nprocs=world_size,
