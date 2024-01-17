@@ -20,11 +20,13 @@ DATA_DIR = "/rds/user/tl526/hpc-work/football/h5/t32.hdf5"
 MODEL_ARGS = ()
 MODEL_KWARGS = dict(n_timestep=32,
                     n_joint=29,
+                    d_joint=3,
                     d_x=3,
+                    n_head=32,
+                    n_layers=8,
                     d_model=256,
-                    n_head=8,
                     d_hid=512,
-                    n_layers=8)
+                    dropout=0.2)
 
 def save(model):
     # Create directory if not exist
@@ -79,7 +81,7 @@ def train(rank, world_size):
     epoch = 1
     patience = 3
 
-    while True:
+    for _ in range(5):
         # Training
         train_sampler.set_epoch(epoch)
 
