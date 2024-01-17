@@ -81,7 +81,7 @@ def train(rank, world_size):
     epoch = 1
     patience = 3
 
-    for _ in range(5):
+    while True:
         # Training
         train_sampler.set_epoch(epoch)
 
@@ -158,7 +158,7 @@ def train(rank, world_size):
 
 if __name__ == "__main__":
     # 4 GPUs
-    world_size = 2
+    world_size = 4
 
     print(MODEL_KWARGS)
     mp.spawn(train,
