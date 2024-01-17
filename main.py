@@ -128,7 +128,6 @@ def train(rank, world_size):
             train_loss = total_train_loss.item() / len(train_loader)
             eval_loss = total_eval_loss.item() / len(eval_loader)
 
-            print(f"epoch {epoch} | train loss {train_loss:5.4f} | eval loss {eval_loss:5.4f}")
             if eval_loss < last_val_loss:
                 if eval_loss < best_val_loss:
                     save(ddp_model)
@@ -140,6 +139,7 @@ def train(rank, world_size):
             else:
                 patience -= 1
             
+            print(f"epoch {epoch} | train loss {train_loss:5.4f} | eval loss {eval_loss:5.4f} | patience {patience}", flush=True)
             last_val_loss = eval_loss
         
         # Check for early stopping
