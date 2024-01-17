@@ -259,7 +259,7 @@ class HumanPoseDataset(Dataset):
     def __getitem__(self, idx):
         data = self.preprocessing(self._data[idx])
 
-        rank = torch.distributed.get_rank()
+        rank = torch.distributed.get_rank() if torch.distributed.is_available() else 0
         device = torch.device(f'cuda:{rank}' if torch.cuda.is_available() else 'cpu')
         data = torch.tensor(data, dtype=torch.float, device=device)
 
