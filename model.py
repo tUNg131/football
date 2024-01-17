@@ -41,7 +41,7 @@ class Embedding(nn.Module):
             num_embeddings=timesteps, embedding_dim=d_model, dropout=dropout
         )
 
-        num_space_embeddings = (n_joint * d_joint) / d_x
+        num_space_embeddings = (n_joint * d_joint) // d_x
         self.space_embedding = nn.Embedding(
             num_embeddings=num_space_embeddings, embedding_dim=d_model
         )
