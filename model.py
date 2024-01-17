@@ -50,7 +50,7 @@ class Embedding(nn.Module):
     def forward(self, x):
         bsize, timesteps, n_joint, d_joint = x.shape
 
-        n_token = (n_joint * d_joint) / self.d_x
+        n_token = (n_joint * d_joint) // self.d_x
 
         # time embedding
         time_emb = self.time_embedding(
