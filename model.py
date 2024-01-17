@@ -73,14 +73,14 @@ class Embedding(nn.Module):
         # nan embedding
         nan_emb = self.nan_embedding(
             torch.isnan(x)
+            .view(bsize, -1, self.d_x)
+            .any(-1)
             .int()
-            .view(bsize, -1)
         )
 
         x = self.linear(
             torch.nan_to_num(x)
-            .view(bsize, -1)
-            .unsqueeze(-1)
+            .view(bsize, -1, self.d_x)
         )
 
         emb = x + time_emb + space_emb + nan_emb
