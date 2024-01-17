@@ -46,6 +46,10 @@ class Embedding(nn.Module):
             num_embeddings=num_space_embeddings, embedding_dim=d_model
         )
 
+        self.nan_embedding = nn.Embedding(
+            num_embeddings=2, embedding_dim=d_model
+        )
+
 
     def forward(self, x):
         bsize, timesteps, n_joint, d_joint = x.shape
