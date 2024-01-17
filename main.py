@@ -158,7 +158,7 @@ def train(rank, world_size):
 
 if __name__ == "__main__":
     # 4 GPUs
-    world_size = 4
+    world_size = 2
 
     print(MODEL_KWARGS)
     mp.spawn(train,
