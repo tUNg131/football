@@ -75,6 +75,7 @@ def train(rank, world_size):
                              sampler=eval_sampler)
     
     best_val_loss = float('inf')
+    last_val_loss = float('inf')
     epoch = 1
     patience = 3
 
@@ -128,16 +129,18 @@ def train(rank, world_size):
             eval_loss = total_eval_loss.item() / len(eval_loader)
 
             print(f"epoch {epoch} | train loss {train_loss:5.4f} | eval loss {eval_loss:5.4f}")
-            if eval_loss < best_val_loss:
+            if eval_loss < last_val_loss:
+                if eval_loss < best_val_loss:
+                    save(ddp_model)
 
-                save(ddp_model)
-
-                best_val_loss = eval_loss
+                    best_val_loss = eval_loss
                 patience = 3
             elif patience <= 0:
                 stop_early = torch.tensor(True, device=rank)
             else:
                 patience -= 1
+            
+            last_val_loss = eval_loss
         
         # Check for early stopping
         dist.broadcast(stop_early, src=0)
