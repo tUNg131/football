@@ -107,7 +107,7 @@ class TransformerModel(nn.Module):
         encoder_layer = nn.TransformerEncoderLayer(d_model, n_head, d_hid, dropout, batch_first=True)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, n_layers)
 
-        self.linear = nn.Linear(d_model, 1)
+        self.linear = nn.Linear(d_model, d_x)
 
     def forward(self, x):
         emb = self.embedding(x)
