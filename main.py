@@ -16,7 +16,7 @@ from dataset import HumanPoseDataset
 
 
 CHECKPOINT_DIR = "/home/tl526/football/checkpoints"
-DATA_DIR = "/home/tl526/rds/hpc-work/football/h5/t32.hdf5"
+DATA_DIR = "/rds/user/tl526/hpc-work/football/h5/t32.hdf5"
 MODEL_ARGS = ()
 MODEL_KWARGS = dict(n_timestep=32,
                     n_joint=29,
