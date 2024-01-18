@@ -58,19 +58,7 @@ def train(rank, world_size):
     generator = torch.Generator().manual_seed(42)
     train_dataset, eval_dataset = random_split(ds, [0.7, 0.3], generator=generator)
 
-    # local_model = TransformerModel(*MODEL_ARGS, **MODEL_KWARGS).to(rank)
-
-    model_args, model_kwargs, state_dict = torch.load("/home/tl526/football/checkpoints/model_42132142_2024-01-17_18-45-05.pt")
-    local_model = TransformerModel(*model_args, **model_kwargs)
-
-    from collections import OrderedDict
-    new_state_dict = OrderedDict()
-    for k, v in state_dict.items():
-        name = k[7:] # remove `module.`
-        new_state_dict[name] = v
-    local_model.load_state_dict(new_state_dict)
-
-    local_model.to(rank)
+    local_model = TransformerModel(*MODEL_ARGS, **MODEL_KWARGS).to(rank)
     
     ddp_model = DDP(local_model, device_ids=[rank])
 
