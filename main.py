@@ -69,6 +69,8 @@ def train(rank, world_size):
         name = k[7:] # remove `module.`
         new_state_dict[name] = v
     local_model.load_state_dict(new_state_dict)
+
+    local_model.to(rank)
     
     ddp_model = DDP(local_model, device_ids=[rank])
 
