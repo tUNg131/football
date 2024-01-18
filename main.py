@@ -33,7 +33,7 @@ def save(model):
     os.makedirs(os.path.dirname(CHECKPOINT_DIR), exist_ok=True)
 
     # Save the model
-    state = [MODEL_ARGS, MODEL_KWARGS, copy.deepcopy(model.state_dict())]
+    state = [MODEL_ARGS, MODEL_KWARGS, copy.deepcopy(model.module.state_dict())]
     
     filename = time.strftime(f"model_{os.environ['SLURM_JOB_ID']}_%Y-%m-%d_%H-%M-%S.pt")
     torch.save(state, os.path.join(CHECKPOINT_DIR, filename))
@@ -60,8 +60,15 @@ def train(rank, world_size):
 
     # local_model = TransformerModel(*MODEL_ARGS, **MODEL_KWARGS).to(rank)
 
-    model_args, model_kwargs, state = torch.load("/home/tl526/football/checkpoints/model_42132142_2024-01-17_18-45-05.pt")
+    model_args, model_kwargs, state_dict = torch.load("/home/tl526/football/checkpoints/model_42132142_2024-01-17_18-45-05.pt")
     local_model = TransformerModel(*model_args, **model_kwargs)
+
+    from collections import OrderedDict
+    new_state_dict = OrderedDict()
+    for k, v in state_dict.items():
+        name = k[7:] # remove `module.`
+        new_state_dict[name] = v
+    local_model.load_state_dict(new_state_dict)
     
     ddp_model = DDP(local_model, device_ids=[rank])
 
