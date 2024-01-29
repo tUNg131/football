@@ -24,8 +24,8 @@ MODEL_KWARGS = dict(n_timestep=32,
                     d_x=3,
                     n_head=16,
                     n_layers=8,
-                    d_model=256,
-                    d_hid=512,
+                    d_model=1024,
+                    d_hid=2048,
                     dropout=0.2)
 
 def save(model):
