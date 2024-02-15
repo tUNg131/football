@@ -16,16 +16,16 @@ from dataset import HumanPoseDataset
 
 
 CHECKPOINT_DIR = "/home/tl526/football/checkpoints"
-DATA_DIR = "/rds/user/tl526/hpc-work/football/h5/t32.hdf5"
+DATA_DIR = "/rds/user/tl526/hpc-work/football/h5/10fps/t64.hdf5"
 MODEL_ARGS = ()
-MODEL_KWARGS = dict(n_timestep=32,
+MODEL_KWARGS = dict(n_timestep=64,
                     n_joint=29,
                     d_joint=3,
                     d_x=3,
-                    n_head=4,
+                    n_head=8,
                     n_layers=8,
-                    d_model=256,
-                    d_hid=512,
+                    d_model=1024,
+                    d_hid=2048,
                     dropout=0.2)
 
 def save(model):
