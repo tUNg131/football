@@ -22,7 +22,7 @@
 #! Note that the job submission script will enforce no more than 32 cpus per GPU.
 #SBATCH --gres=gpu:4
 #! How much wallclock time will be required?
-#SBATCH --time=00:10:00
+#SBATCH --time=03:00:00
 #! What types of email messages do you wish to receive?
 #SBATCH --mail-type=ALL
 #! Uncomment this to prevent the job from being requeued (e.g. if
@@ -56,7 +56,7 @@ module load python/3.8 cuda/12.1 cudnn/8.9_cuda-12.1
 virtualenv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-git checkout 10fps-8heads
+git checkout 10fps
 
 #! Full path to application executable: 
 application="python main.py"
