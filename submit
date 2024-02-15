@@ -10,7 +10,7 @@
 
 #! sbatch directives begin here ###############################
 #! Name of the job:
-#SBATCH -J per-joints-4heads
+#SBATCH -J 10fps-8heads
 #! Which project should be charged (NB Wilkes2 projects end in '-GPU'):
 #SBATCH -A TURNER-SL3-GPU
 #! How many whole nodes should be allocated?
