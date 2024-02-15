@@ -233,7 +233,7 @@ class HumanPoseDataset(Dataset):
 
 
     @staticmethod
-    def drop(data, max_gap_size=3):
+    def drop(data, max_gap_size=15):
         sequence_length = data.size(dim=0)
 
         assert sequence_length - max_gap_size - 2 >= 1
