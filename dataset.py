@@ -256,9 +256,9 @@ class HumanPoseDataset(Dataset):
         return data
 
 
-    def __getitem__(self, _idx):
+    def __getitem__(self, idx):
 
-        raw = self._data[_idx // 2][:32] if _idx % 2 == 0 else self._data[_idx // 2][32:]
+        raw = self._data[idx]
 
         data = self.preprocessing(raw)
 
@@ -274,7 +274,7 @@ class HumanPoseDataset(Dataset):
 
 
     def __len__(self):
-        return len(self._data) * 2
+        return len(self._data)
 
     def save(self, filepath):
         with h5py.File(filepath, "w") as f:
