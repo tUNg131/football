@@ -256,8 +256,11 @@ class HumanPoseDataset(Dataset):
         return data
 
 
-    def __getitem__(self, idx):
-        data = self.preprocessing(self._data[idx])
+    def __getitem__(self, _idx):
+
+        raw = self._data[_idx // 2][:32] if _idx % 2 == 0 else self._data[_idx // 2][32:]
+
+        data = self.preprocessing(raw)
 
         rank = torch.distributed.get_rank() if torch.distributed.is_available() else 0
         device = torch.device(f'cuda:{rank}' if torch.cuda.is_available() else 'cpu')
@@ -271,7 +274,7 @@ class HumanPoseDataset(Dataset):
 
 
     def __len__(self):
-        return len(self._data)
+        return len(self._data) * 2
 
     def save(self, filepath):
         with h5py.File(filepath, "w") as f:
