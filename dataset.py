@@ -1,14 +1,14 @@
 import os
 import re
 import json
-import h5py
-import torch
-import random
-import numpy as np
 import multiprocessing
 
 from functools import reduce
 from collections import deque
+
+import torch
+import h5py
+import numpy as np
 
 from torch.utils.data import Dataset
 
@@ -41,7 +41,7 @@ JOINT_KEYS = [
     "rHip",
     "rKnee",
     "rPinky",
-    "rShoulder",
+    "rShoulder", 
     "rSmallToe",
     "rThumb",
     "rWrist"
@@ -232,26 +232,13 @@ class HumanPoseDataset(Dataset):
         return t
 
 
-    @staticmethod
-    def drop(data, max_gap_size=15):
-        sequence_length = data.size(dim=0)
-
-        assert sequence_length - max_gap_size - 2 >= 1
-
-        gap_size = random.randint(1, max_gap_size)
-        start_index = random.randint(1, sequence_length - gap_size - 2)
-
-        data[start_index:start_index + gap_size] = float('nan')
-
-        return data
-
-
     def preprocessing(self, data):
         # Subtract mid-hip
         data = data - data[..., 13, np.newaxis, :]
 
-        # Remove mid-hip
-        data = np.delete(data, 13, axis=1)
+        # Remove joints
+        removed_indexes = [1, 2, 4, 5, 8, 10, 11, 13, 17, 18, 20, 21, 24, 26, 27]
+        data = np.delete(data, removed_indexes, axis=1)
 
         return data
 
@@ -266,11 +253,7 @@ class HumanPoseDataset(Dataset):
         device = torch.device(f'cuda:{rank}' if torch.cuda.is_available() else 'cpu')
         data = torch.tensor(data, dtype=torch.float, device=device)
 
-        target = data.clone()
-
-        data = self.drop(data)
-
-        return data, target
+        return data
 
 
     def __len__(self):

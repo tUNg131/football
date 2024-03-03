@@ -1,6 +1,10 @@
 import os
 import copy
 import time
+import random
+
+from datetime import datetime
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -15,18 +19,20 @@ from model import TransformerModel
 from dataset import HumanPoseDataset
 
 
-CHECKPOINT_DIR = "/home/tl526/football/checkpoints"
+CHECKPOINT_DIR = "/rds/user/tl526/hpc-work/football/checkpoints"
 DATA_DIR = "/rds/user/tl526/hpc-work/football/h5/10fps/t64.hdf5"
 MODEL_ARGS = ()
 MODEL_KWARGS = dict(n_timestep=64,
-                    n_joint=29,
+                    n_joint=15,
                     d_joint=3,
                     d_x=3,
-                    n_head=8,
+                    n_head=9,
                     n_layers=8,
                     d_model=1024,
                     d_hid=2048,
                     dropout=0.2)
+WORLD_SIZE = 4
+LOCAL_BATCH_SIZE = 64
 
 def save(model):
     # Create directory if not exist
@@ -35,7 +41,7 @@ def save(model):
     # Save the model
     state = [MODEL_ARGS, MODEL_KWARGS, copy.deepcopy(model.module.state_dict())]
     
-    filename = time.strftime(f"model_{os.environ['SLURM_JOB_ID']}_%Y-%m-%d_%H-%M-%S.pt")
+    filename = time.strftime(f"model_{os.environ['SLURM_JOB_ID']}.pt")
     torch.save(state, os.path.join(CHECKPOINT_DIR, filename))
 
 
@@ -49,6 +55,18 @@ def setup(rank, world_size):
 def cleanup():
     dist.barrier()
     dist.destroy_process_group()
+
+
+def drop(data, gap_size):
+    sequence_length = data.size(dim=0)
+
+    assert sequence_length - gap_size - 2 >= 1
+
+    start_index = random.randint(1, sequence_length - gap_size - 2)
+
+    data[start_index:start_index + gap_size] = float('nan')
+
+    return data
 
 
 def train(rank, world_size):
@@ -68,18 +86,18 @@ def train(rank, world_size):
 
     train_sampler = DistributedSampler(train_dataset)
     train_loader = DataLoader(train_dataset,
-                              batch_size=16,
+                              batch_size=LOCAL_BATCH_SIZE,
                               sampler=train_sampler)
     
     eval_sampler = DistributedSampler(eval_dataset)
     eval_loader = DataLoader(eval_dataset,
-                             batch_size=16,
+                             batch_size=LOCAL_BATCH_SIZE,
                              sampler=eval_sampler)
     
     best_val_loss = float('inf')
-    last_val_loss = float('inf')
     epoch = 1
-    patience = 3
+    patience = 5
+    gap_size = 1
 
     while True:
         # Training
@@ -88,7 +106,10 @@ def train(rank, world_size):
         ddp_model.train()
 
         total_train_loss = 0.
-        for data, target in train_loader:
+        for raw in train_loader:
+            target = raw.clone()
+            data = drop(raw, gap_size)
+
             optimizer.zero_grad(set_to_none=True)
 
             with torch.autocast("cuda"):
@@ -109,7 +130,9 @@ def train(rank, world_size):
 
         total_eval_loss = 0.
         with torch.no_grad():
-            for data, target in eval_loader:                
+            for raw in eval_loader:
+                target = raw.clone()
+                data = drop(raw, gap_size)
                 with torch.autocast("cuda"):
                     output = ddp_model(data)
 
@@ -127,22 +150,25 @@ def train(rank, world_size):
 
         stop_early = torch.tensor(False, device=rank)
         if rank == 0:
-            train_loss = total_train_loss.item() / len(train_loader)
-            eval_loss = total_eval_loss.item() / len(eval_loader)
+            train_loss = total_train_loss.item() / len(train_dataset)
+            eval_loss = total_eval_loss.item() / len(eval_dataset)
 
-            if eval_loss < last_val_loss:
-                if eval_loss < best_val_loss:
-                    save(ddp_model)
+            if eval_loss < best_val_loss:
+                save(ddp_model)
 
-                    best_val_loss = eval_loss
+                best_val_loss = eval_loss
                 patience = 3
             elif patience <= 0:
-                stop_early = torch.tensor(True, device=rank)
+                if gap_size >= 15:
+                    stop_early = torch.tensor(True, device=rank)
+                else:
+                    gap_size += 1
+                    patience = 3
+                    best_val_loss = float('inf')
             else:
                 patience -= 1
             
-            print(f"epoch {epoch} | train loss {train_loss:5.4f} | eval loss {eval_loss:5.4f} | patience {patience}", flush=True)
-            last_val_loss = eval_loss
+            print(f"Time {datetime.now()} | epoch {epoch} | train loss {train_loss:5.6f} | eval loss {eval_loss:5.6f} | patience {patience}", flush=True)
         
         # Check for early stopping
         dist.broadcast(stop_early, src=0)
@@ -157,11 +183,9 @@ def train(rank, world_size):
 
 
 if __name__ == "__main__":
-    # 4 GPUs
-    world_size = 4
-
+    print(WORLD_SIZE)
     print(MODEL_KWARGS)
     mp.spawn(train,
-             args=(world_size,),
-             nprocs=world_size,
+             args=(WORLD_SIZE,),
+             nprocs=WORLD_SIZE,
              join=True)
