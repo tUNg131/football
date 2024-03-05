@@ -26,12 +26,12 @@ MODEL_KWARGS = dict(n_timestep=64,
                     n_joint=15,
                     d_joint=3,
                     d_x=3,
-                    n_head=9,
+                    n_head=8,
                     n_layers=8,
                     d_model=1024,
                     d_hid=2048,
                     dropout=0.2)
-WORLD_SIZE = 4
+WORLD_SIZE = 2
 LOCAL_BATCH_SIZE = 64
 
 def save(model):

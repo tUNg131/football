@@ -81,42 +81,45 @@ def translate_to_indices(_adjacency_list, labels=LABELS):
 
 adjacency_list = translate_to_indices(raw_adjacency_list)
 
-def animate(sequence):
-    # Create a figure and 3D axis
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
+def animate(*sequences):
+    fig = plt.figure(figsize=(20, 10))
 
-    # Scatter plot initialization
-    scatter = ax.scatter([], [], [], c='blue', marker='o')
+    artists = []
+    for i, sequence in enumerate(sequences):
+        # Create 3D axis
+        ax = fig.add_subplot(1, len(sequences), i+1, projection='3d')
 
-    # Line plot initialization
-    line_dict = {
-        start_point: [ax.plot([], [], [], color='black')[0] for _ in range(len(end_points))] for start_point, end_points in adjacency_list.items()
-    }
+        # Scatter plot initialization
+        points = ax.scatter([], [], [], c='blue', marker='o')
 
-    # Set the limits of the plot
-    ax.set_xlim(-1, 1)
-    ax.set_ylim(-1, 1)
-    ax.set_zlim(-1, 1)
+        # Line plot initialization
+        lines = {
+            start_point: [ax.plot([], [], [], color='black')[0] for _ in range(len(end_points))]
+                for start_point, end_points in adjacency_list.items()
+        }
 
-    # Update function for animation
+        # Set the limits of the plot
+        ax.set_xlim(-1, 1)
+        ax.set_ylim(-1, 1)
+        ax.set_zlim(-1, 1)
+
+        artists.append((points, lines))
+
     def update(frame):
-        # Update scatter plot
-        scatter._offsets3d = (sequence[frame, :, 0], sequence[frame, :, 1], sequence[frame, :, 2])
+        for sequence, (points, lines) in zip(sequences, artists):
+            points._offsets3d = sequence[frame, :, 0], sequence[frame, :, 1], sequence[frame, :, 2]
 
-        # Update lines
-        for start_point, end_points in adjacency_list.items():
-            for i, end_point in enumerate(end_points):
-                x = [sequence[frame, start_point, 0], sequence[frame, end_point, 0]]
-                y = [sequence[frame, start_point, 1], sequence[frame, end_point, 1]]
-                z = [sequence[frame, start_point, 2], sequence[frame, end_point, 2]]
-
-                line_dict[start_point][i].set_data(x, y)
-                line_dict[start_point][i].set_3d_properties(z)
+            for start_point, end_points in adjacency_list.items():
+                for i, end_point in enumerate(end_points):
+                    x = [sequence[frame, start_point, 0], sequence[frame, end_point, 0]]
+                    y = [sequence[frame, start_point, 1], sequence[frame, end_point, 1]]
+                    z = [sequence[frame, start_point, 2], sequence[frame, end_point, 2]]
+    
+                    lines[start_point][i].set_data(x, y)
+                    lines[start_point][i].set_3d_properties(z)
 
     # Create the animation
-    animation = FuncAnimation(fig, update, frames=len(sequence), interval=250, blit=False)
+    animation = FuncAnimation(fig, update, frames=len(sequences[0]), interval=250, blit=False)
 
-    plt.show()
-
+    plt.close(fig)
     return animation
