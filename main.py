@@ -69,7 +69,7 @@ def drop(data, gap_size):
     return data
 
 def add_gaussian_noise(data):
-    noise = torch.randn_like(data, mean=0, std=0.1)
+    noise = torch.randn_like(data, mean=0, std=0.02)
     return data + noise
 
 def train(rank, world_size):
