@@ -68,6 +68,9 @@ def drop(data, gap_size):
 
     return data
 
+def add_gaussian_noise(data):
+    noise = torch.randn_like(data, mean=0, std=0.1)
+    return data + noise
 
 def train(rank, world_size):
     setup(rank, world_size)
@@ -109,6 +112,7 @@ def train(rank, world_size):
         for raw in train_loader:
             target = raw.clone()
             data = drop(raw, gap_size)
+            data = add_gaussian_noise(data)
 
             optimizer.zero_grad(set_to_none=True)
 
