@@ -18,7 +18,8 @@ class DropRandomUniform:
         self.ratio = int(ratio) / 100
 
     def __call__(self, sample: Tensor) -> Tensor:
-        random_mask = torch.rand(sample.size(0)) < self.ratio
+        n_timesteps, n_joints, _ = sample.size()
+        random_mask = torch.rand(n_timesteps, n_joints) < self.ratio
         sample[random_mask] = float('nan')
         return sample
 
