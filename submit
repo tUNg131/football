@@ -10,7 +10,7 @@
 
 #! sbatch directives begin here ###############################
 #! Name of the job:
-#SBATCH -J per-joints-test
+#SBATCH -J encoder-mdn
 #! Which project should be charged (NB Wilkes2 projects end in '-GPU'):
 #SBATCH -A TURNER-MASTERS-PROJECTS-SL2-GPU
 #! How many whole nodes should be allocated?
