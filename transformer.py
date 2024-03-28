@@ -130,7 +130,7 @@ class TrainableFootballTransformer(pl.LightningModule):
 
         log_pi = torch.log_softmax(pi, dim=-1)
         log_normal_prob = (
-            (- torch.log(sigma) + 0.5 * torch.pow((y - mu) / sigma, 2))
+            (- torch.log(sigma) - 0.5 * torch.pow((y - mu) / sigma, 2))
             .view(-1, self.hparams.n_gaussian, self.hparams.d_out)
             .sum(dim=-1)
         )
