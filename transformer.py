@@ -21,7 +21,7 @@ from dataset import (
 )
 
 
-DEFAULT_LOADER_WORKER_COUNT = os.cpu_count() - 1
+DEFAULT_LOADER_WORKER_COUNT = min(os.cpu_count() - 1, 32)
 
 
 class TrainableFootballTransformer(pl.LightningModule):
@@ -111,7 +111,7 @@ class TrainableFootballTransformer(pl.LightningModule):
                                           n_gaussian=self.hparams.n_gaussian)
     
     def __select_dim1(self, x: Tensor, mask: Tensor) -> Tensor:
-        return x[mask].view(x.size(0), -1, x.size(-1))
+        return x[mask]
 
     def __to_model_format(self, *inputs):
         return (
@@ -126,12 +126,12 @@ class TrainableFootballTransformer(pl.LightningModule):
         pi = self.__select_dim1(pi, nan_position)
         sigma = self.__select_dim1(sigma, nan_position)
         mu = self.__select_dim1(mu, nan_position) 
-        y = self.__select_dim1(y, nan_position).repeat(1, 1, self.hparams.n_gaussian)
+        y = self.__select_dim1(y, nan_position).repeat(1, self.hparams.n_gaussian)
 
         log_pi = torch.log_softmax(pi, dim=-1)
         log_normal_prob = (
             (- torch.log(sigma) + 0.5 * torch.pow((y - mu) / sigma, 2))
-            .view(x.size(0), -1, self.hparams.n_gaussian, self.hparams.d_out)
+            .view(-1, self.hparams.n_gaussian, self.hparams.d_out)
             .sum(dim=-1)
         )
         return -torch.logsumexp(log_pi + log_normal_prob, dim=-1)
