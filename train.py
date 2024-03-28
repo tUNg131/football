@@ -43,7 +43,7 @@ def main(hparams: Namespace) -> None:
     # Init model checkpoint callback
     checkpoint_callback = ModelCheckpoint(
         dirpath=ckpt_path,
-        filename="{epoch}-{val_loss:.6f}",
+        filename="{epoch}-{val_nll:.6f}",
         verbose=True,
         save_weights_only=True,
         monitor=hparams.monitor,
